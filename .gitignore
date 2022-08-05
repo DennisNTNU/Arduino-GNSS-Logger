@@ -1,0 +1,7 @@
+pcb/gerber
+pcb/arduino-gnss-logger-pcb.net
+pcb/fp-info-cache
+*-bak
+*.pdf
+*.ino_
+*.swp
