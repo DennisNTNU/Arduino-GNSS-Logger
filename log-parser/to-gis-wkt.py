@@ -9,7 +9,7 @@ def main():
         exit()
 
     data_path = sys.argv[1]
-    data_path_base = data_path.split('.csv')[0]
+    data_path_base = data_path.split('.CSV')[0]
     data = pd.read_csv(data_path)
     #print(data_path.split('.csv'))
     #print(data)
