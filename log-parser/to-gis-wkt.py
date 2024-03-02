@@ -8,6 +8,11 @@ def main():
         print('  This script requires a path to an input file')
         exit()
 
+
+    decimation = 1
+    if len(sys.argv) > 2:
+        decimation = int(sys.argv[2])
+
     data_path = sys.argv[1]
     data_path_base = data_path.split('.CSV')[0]
     data = pd.read_csv(data_path)
@@ -17,10 +22,15 @@ def main():
     last_index = data.shape[0]-1
     wkt_str = 'WKT,name,datetime\n"LINESTRING('
     for i in range(last_index):
+
+        if (i % decimation) != 0:
+            continue
         lat = data.values[i,1]
         lon = data.values[i,2]
         lat_float = int(lat[1:3]) + float(lat[4:12])/60.0
         lon_float = int(lon[1:4]) + float(lon[5:13])/60.0
+        if lon[14] == 'W':
+            lon_float *= -1
 
         #print(i, end=' ')
         #print('|' + data.values[i,1] + '|', end=' ')
@@ -28,13 +38,15 @@ def main():
         #print(lat_float, lon_float)
         wkt_str += f'{lon_float} {lat_float}, '
 
-    lat = data.values[last_index,1]
-    lon = data.values[last_index,2]
+    lat = data.values[last_index - last_index % decimation,1]
+    lon = data.values[last_index - last_index % decimation,2]
     lat_float = int(lat[1:3]) + float(lat[4:12])/60.0
     lon_float = int(lon[1:4]) + float(lon[5:13])/60.0
+    if lon[14] == 'W':
+        lon_float *= -1
 
-    wkt_str += f'{lon_float} {lat_float})",path,' + os.path.basename(data_path_base) + f'T{data.values[0,0]}\n'
-    wkt_str += f'"POINT({lon_float} {lat_float})",final_position,' + os.path.basename(data_path_base) + f'T{data.values[last_index,0]}\n'
+    wkt_str += f'{lon_float} {lat_float})",path,' + os.path.basename(data_path_base)[:6] + f'T{data.values[0,0]}\n'
+    wkt_str += f'"POINT({lon_float} {lat_float})",final_position,' + os.path.basename(data_path_base)[:6] + f'T{data.values[last_index,0]}\n'
 
     output_path_wkt = data_path_base + '-wkt.csv'
     with open(output_path_wkt, 'w') as f:
