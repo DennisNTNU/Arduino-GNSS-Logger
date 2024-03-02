@@ -52,7 +52,7 @@ bool initialized_SD = false;
 char status_string_SD[16] = "";
 char filename[32] = "";
 
-byte log_subsample = 2;
+byte log_subsample = 3;
 byte log_index = 1;
 
 void clear_rmc_buffers()
