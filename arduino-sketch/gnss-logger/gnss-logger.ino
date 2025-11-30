@@ -4,10 +4,19 @@
 
 unsigned long ts = 0;
 
+byte SD_STATUS_LED_PIN = 4;
+byte FIX_STATUS_LED_PIN = 5;
+byte BUTTON_PIN = 6;
+
+byte SPI_SD_CHIP_SELECT_PIN = 7;
+
+
+
 // General GPS parsing variables
 int nmea_msgs_seen = 0;
 int nmea_msgs_seen_10k = 0;
 char string[10] = "";
+
 
 // GPS PARSE STATE MACHINE
 int nmea_parse_state = 1;
@@ -21,9 +30,10 @@ int desired_nmea_message_index = 0;
 
 char nmea_message_id[8] = "";
 
-#define FOUND_NMEA_MESSAGE_RMC 3
 int current_nmea_field = 1; // Type GGA has 14 fields (14 commas) plus a checksum at the end (not preceded by a comma)
 int nmea_field_str_index = 0;
+
+#define FOUND_NMEA_MESSAGE_RMC 3
 char nmea_msg_date[8] = "";
 char nmea_msg_time[16] = "";
 char nmea_msg_lat[16] = "";
@@ -42,19 +52,24 @@ char nmea_msg_altitude[8] = "";
 char nmea_msg_geoid_separation[8] = "";
 bool GGA_message_update = false;
 
+
+
 // SD CARD LOGGING GLOBALS
     //Sd2Card card;
     //SdVolume volume;
     //SdFile root;
 File myFile;
-const int chipSelect_SD = 7;
+const int chipSelect_SD = SPI_SD_CHIP_SELECT_PIN;
 bool initialized_SD = false;
 char status_string_SD[16] = "";
 char filename[32] = "";
 
-byte log_subsample = 3;
+byte log_subsample = 3; // decimation factor
 byte log_index = 1;
 
+
+// RMC = a specific nmea message
+// Each message has that this program parses has their own dedicated buffers
 void clear_rmc_buffers()
 {
   memset(nmea_msg_date, 0, 8);
@@ -93,15 +108,17 @@ void initSD()
   }
 }
 
-byte SD_STATUS_LED_PIN = 4;
-byte FIX_STATUS_LED_PIN = 5;
-
 void setup()
 {
   //pinMode(2, INPUT_PULLUP); // these are I2C pins
   //pinMode(3, INPUT_PULLUP); // these are I2C pins
   pinMode(SD_STATUS_LED_PIN, OUTPUT);
   pinMode(FIX_STATUS_LED_PIN, OUTPUT);
+
+  pinMode(BUTTON_PIN, INPUT);
+
+  pinMode(SPI_SD_CHIP_SELECT_PIN, OUTPUT);
+
   pinMode(8, OUTPUT);
   pinMode(9, OUTPUT);
   pinMode(10, OUTPUT);
@@ -130,12 +147,11 @@ void setup()
   delay(100);
 
   ts = millis();
+
   initSD();
 
-
-
   oled_setup(128, 64);
-  delay(200);
+  delay(20);
   oled_setTestPattern();
   delay(200);
   oled_clear();
@@ -145,18 +161,23 @@ void setup()
   oled_clear();
 
   oled_writeText(status_string_SD, 1, 0);
+
   clear_nmea_buffers();
 
   Serial.flush();
+
   digitalWrite(SD_STATUS_LED_PIN, LOW);
   digitalWrite(FIX_STATUS_LED_PIN, LOW);
 }
 
 void loop()
 {
+  parse_nmea();
+  Serial.flush();
+
+
   if (RMC_message_update && GGA_message_update)
   {
-    has_fix = false;
     update_coords_oled();
   }
 
@@ -167,17 +188,36 @@ void loop()
     num2str4positive(nmea_msgs_seen_10k, string);
     num2str4positive(nmea_msgs_seen, &(string[4]));
     oled_writeText(string, 64, 7);
+
+
+    byte a = digitalRead(BUTTON_PIN);
+    if (a)
+    {
+      ;
+    }
+    else
+    {
+      log_subsample++;
+      if (log_subsample > 5)
+      {
+        log_subsample = 1;
+      }
+    }
+
+
+    num2str2positive(log_subsample, string);
+    oled_writeText(string, 37, 7);
+    oled_writeText("Decim:", 1, 7);
+
     ts = ts1;
     digitalWrite(SD_STATUS_LED_PIN, (initialized_SD) ? false : true);
     digitalWrite(FIX_STATUS_LED_PIN, has_fix);
+    has_fix = false;
   }
 
   // Needs to have a small delay (rather than large), else there
   // will be serial interface buffer overflows and GNSS serial data is lost
   delay(1);
-
-  parse_nmea();
-  Serial.flush();
 
 }
 
@@ -206,7 +246,9 @@ void update_coords_oled()
   nmea_msg_time[2] = ':';
   //    "hhmmss" 
   // -> "hh:mm:ss"
-  oled_writeText(nmea_msg_time, 70, 2);
+
+  oled_writeText(nmea_msg_time, 70, 5);
+
 
   //    "ddmmyy"
   // -> " 20yy.mm.dd"
@@ -222,7 +264,9 @@ void update_coords_oled()
   date_str[8] = nmea_msg_date[0];
   date_str[9] = nmea_msg_date[1];
   date_str[10] = '\0';
-  oled_writeText(date_str, 2, 2);
+
+  oled_writeText(date_str, 2, 5);
+
 
   nmea_msg_lat[13] = '\0';
   nmea_msg_lat[12] = nmea_msg_lat[10];
@@ -241,8 +285,10 @@ void update_coords_oled()
   {
     nmea_msg_lat[0] = ' ';
   }
-  oled_writeText(" ", 2, 4);
+
+  oled_writeText(" ", 2, 2);
   oled_writeString(nmea_msg_lat);
+
 
   nmea_msg_lon[14] = '\0';
   nmea_msg_lon[13] = nmea_msg_lon[11];
@@ -265,7 +311,9 @@ void update_coords_oled()
       nmea_msg_lon[1] = ' ';
     }
   }
-  oled_writeText(nmea_msg_lon, 2, 5);
+
+  oled_writeText(nmea_msg_lon, 2, 3);
+
 
   char good_fix = nmea_msg_fix_status[0];
   nmea_msg_fix_status[0] = 'F';
@@ -288,7 +336,7 @@ void update_coords_oled()
     nmea_msg_fix_status[7] = ' ';
     nmea_msg_fix_status[8] = '\0';
   }
-  oled_writeText(nmea_msg_fix_status, 2, 3);
+  oled_writeText(nmea_msg_fix_status, 2, 1);
 
 
 
@@ -299,22 +347,30 @@ void update_coords_oled()
   int sog_int_frac = (sog_meter_ps - sog_int_whole)*1000.0;
   //snprintf(nmea_msg_sog, 10, "%6.4f", sog_mps);
   sprintf(nmea_msg_sog, "%2i.%03i", sog_int_whole, sog_int_frac);
-  oled_writeText(nmea_msg_sog, 2, 6);
+
+  oled_writeText(nmea_msg_sog, 2, 4);
   oled_writeString("m/s");
 
+
   nmea_msg_sats[7] = 0;
+  oled_writeText("Sats:", 2, 6);
+  oled_writeString(nmea_msg_sats);
+
+
   nmea_msg_altitude[7] = 0;
+  oled_writeText(nmea_msg_altitude, 64, 4);
+
+
   nmea_msg_geoid_separation[7] = 0;
-  oled_writeText(nmea_msg_sats, 96, 6);
-  oled_writeText(nmea_msg_altitude, 0, 7);
-  oled_writeText(nmea_msg_geoid_separation, 32, 7);
+  oled_writeText("Geoid:", 56, 6);
+  oled_writeString(nmea_msg_geoid_separation);
+
+
+  num2str4positive(rmc_msgs_parsed, string);
+  oled_writeText(string, 64, 1);
+
 
   RMC_message_update = false;
-  
-  num2str4positive(rmc_msgs_parsed, string);
-  oled_writeText(string, 64, 3);
-
-
   
   if (initialized_SD && good_fix == 'A')
   {
@@ -338,7 +394,10 @@ void update_coords_oled()
         if (myFile)
         {
           myFile.println("time, lat, lon, SOG [m/s], Alt");
-          oled_writeText(filename, 32, 1);
+          char temp = filename[8];
+          filename[8] = 0;
+          oled_writeText(filename, 64, 0);
+          filename[8] = temp;
         }
       }
 
@@ -560,6 +619,8 @@ void parse_nmea_msg_rmc(char nmea_msg_char)
 
 
 
+
+
 // convert an integer of size up to 9999 to a string
 void num2str4positive(int num, char* str)
 {
@@ -603,6 +664,47 @@ void num2str4positive(int num, char* str)
   
   // third most sig digit
   dig = num / 10;
+  if (dig == 0 && first_non_zero == -1)
+  {
+    leading_zeros++;
+  }
+  else
+  {
+    first_non_zero = i;
+  }
+  str[i++] = dig + 48;
+  num -= dig*10;
+
+  // least sig digit
+  str[i++] = num + 48;
+
+  str[i++] = 0;
+
+  while (leading_zeros > 0)
+  {
+    str[--leading_zeros] = ' ';
+  }
+}
+
+
+
+
+// convert an integer of size up to 99 to a string
+void num2str2positive(int num, char* str)
+{
+  // constrain num to below 100
+  if (num > 100)
+  {
+    int temp = num / 100;
+    num -= temp*100;
+  }
+
+  char leading_zeros = 0;
+  char first_non_zero = -1;
+  byte i = 0;
+
+  // most sig digit
+  byte dig = num / 10;
   if (dig == 0 && first_non_zero == -1)
   {
     leading_zeros++;

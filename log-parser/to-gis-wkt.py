@@ -6,6 +6,7 @@ def main():
 
     if len(sys.argv) < 2:
         print('  This script requires a path to an input file')
+        print('  The second argument is an optional decmiation factor')
         exit()
 
 
@@ -29,6 +30,8 @@ def main():
         lon = data.values[i,2]
         lat_float = int(lat[1:3]) + float(lat[4:12])/60.0
         lon_float = int(lon[1:4]) + float(lon[5:13])/60.0
+        if lat[13] == 'S':
+            lat_float *= -1
         if lon[14] == 'W':
             lon_float *= -1
 
@@ -42,6 +45,8 @@ def main():
     lon = data.values[last_index - last_index % decimation,2]
     lat_float = int(lat[1:3]) + float(lat[4:12])/60.0
     lon_float = int(lon[1:4]) + float(lon[5:13])/60.0
+    if lat[13] == 'S':
+        lat_float *= -1
     if lon[14] == 'W':
         lon_float *= -1
 

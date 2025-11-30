@@ -3,10 +3,12 @@ from PIL.TiffTags import TAGS
 import os
 import sys
 
+if len(sys.argv) < 2:
+	print('Need args:')
+	print('   python', sys.argv[0], '<path to gopro images> <starting gopro image index>')
+	exit()
+
 images_path = sys.argv[1]
-
-
-
 startindex = int(sys.argv[2])
 
 running = True
