@@ -1,6 +1,9 @@
 
 #include "SSD1306.hpp"
+#include "si7021.hpp"
 #include <SD.h>
+#include <Wire.h>
+
 
 unsigned long ts = 0;
 
@@ -68,6 +71,14 @@ byte log_subsample = 3; // decimation factor
 byte log_index = 1;
 
 
+
+// Si7021 variables
+float temperature_humidity_buffer[2] = {1.0, 2.0};
+
+// other
+int loop_iterations = 0;
+
+
 // RMC = a specific nmea message
 // Each message has that this program parses has their own dedicated buffers
 void clear_rmc_buffers()
@@ -129,6 +140,9 @@ void setup()
   digitalWrite(SD_STATUS_LED_PIN, HIGH);
   digitalWrite(FIX_STATUS_LED_PIN, HIGH);
 
+  Wire.begin();
+  Wire.setClock(400000);
+
   //Serial.begin(9600);
   Serial.begin(19200);
   //Serial.begin(38400);
@@ -176,18 +190,21 @@ void loop()
   Serial.flush();
 
 
+
   if (RMC_message_update && GGA_message_update)
   {
     update_coords_oled();
   }
 
+
   // This will be run only once every second ish, no matter the (variable) loop period
   unsigned long ts1 = millis();
   if (ts1 - ts > 1000)
   {
-    num2str4positive(nmea_msgs_seen_10k, string);
-    num2str4positive(nmea_msgs_seen, &(string[4]));
-    oled_writeText(string, 64, 7);
+    // No longer show this, in favor of humidity & temperature
+    //num2str4positive(nmea_msgs_seen_10k, string);
+    //num2str4positive(nmea_msgs_seen, &(string[4]));
+    //oled_writeText(string, 64, 7);
 
 
     byte a = digitalRead(BUTTON_PIN);
@@ -213,6 +230,27 @@ void loop()
     digitalWrite(SD_STATUS_LED_PIN, (initialized_SD) ? false : true);
     digitalWrite(FIX_STATUS_LED_PIN, has_fix);
     has_fix = false;
+
+    loop_iterations++;
+    if (loop_iterations >= log_subsample)
+    {
+      loop_iterations = 0;
+      readDataSi7021(temperature_humidity_buffer);
+
+      num2str2positive((int)temperature_humidity_buffer[0], string);
+      string[2] = '.';
+      num2str2positive((temperature_humidity_buffer[0] - (int)temperature_humidity_buffer[0])*100, &(string[3]));
+      string[5] = 0;
+
+      oled_writeText(string, 60, 7);
+
+      num2str2positive((int)temperature_humidity_buffer[1], string);
+      string[2] = '.';
+      num2str2positive((temperature_humidity_buffer[1] - (int)temperature_humidity_buffer[1])*100, &(string[3]));
+      string[5] = 0;
+      
+      oled_writeText(string, 95, 7);
+    }
   }
 
   // Needs to have a small delay (rather than large), else there
